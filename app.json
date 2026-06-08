@@ -1,7 +1,8 @@
 {
   "expo": {
-    "name": "my-expenses",
+    "name": "My Expenses",
     "slug": "my-expenses",
+    "scheme": "myexpenses",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,10 +17,30 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.vamsivibecoding.myexpenses"
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-secure-store",
+      "expo-updates",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6f3c0141-3291-446e-9b81-587f87e8ebf0"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6f3c0141-3291-446e-9b81-587f87e8ebf0"
     }
   }
 }
