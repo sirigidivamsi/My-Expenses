@@ -8,12 +8,14 @@ interface SyncState {
   pendingQueue: SyncQueueItem[];
   isOnline: boolean;
   isSyncing: boolean;
+  syncTrigger: number;
   setOnline: (status: boolean) => void;
   setSyncing: (status: boolean) => void;
   addToQueue: (action: SyncQueueItem['action'], table: SyncQueueItem['table'], data: any) => void;
   removeFromQueue: (id: string) => void;
   replaceQueue: (items: SyncQueueItem[]) => void;
   clearQueue: () => void;
+  triggerSync: () => void;
 }
 
 export const useSyncStore = create<SyncState>()(
@@ -22,9 +24,11 @@ export const useSyncStore = create<SyncState>()(
       pendingQueue: [],
       isOnline: true,
       isSyncing: false,
+      syncTrigger: 0,
 
       setOnline: (status) => set({ isOnline: status }),
       setSyncing: (status) => set({ isSyncing: status }),
+      triggerSync: () => set((state) => ({ syncTrigger: state.syncTrigger + 1, isOnline: true })),
 
       addToQueue: (action, table, data) => {
         const newItem: SyncQueueItem = {

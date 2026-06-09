@@ -44,58 +44,6 @@ const SUPPORTED_APPS_LIST = [
   { name: 'IndusInd Bank', pkg: 'com.indusind.mobile' },
 ];
 
-const SIMULATED_NOTIFICATIONS = [
-  {
-    label: 'PhonePe: ₹450 paid to Swiggy 🍕',
-    app_name: 'PhonePe',
-    package_name: 'com.phonepe.app',
-    title: 'Transaction Successful',
-    body: '₹450 paid to Swiggy successful using UPI.',
-  },
-  {
-    label: 'Google Pay: Rs.1,200 to Zomato 🍔',
-    app_name: 'Google Pay',
-    package_name: 'com.google.android.apps.nbu.paisa.user',
-    title: 'Paid successfully',
-    body: 'You sent Rs.1,200 to Zomato via GPay.',
-  },
-  {
-    label: 'HDFC Bank spent: Rs.2,500 at Amazon 🛍️',
-    app_name: 'HDFC Bank',
-    package_name: 'com.snapwork.hdfc',
-    title: 'HDFC Bank Alert',
-    body: 'Alert: Your HDFC card ending 9999 has been spent for Rs.2,500 at Amazon.in. Ref: 23145.',
-  },
-  {
-    label: 'SBI Credit: ₹50,000 Salary 💰',
-    app_name: 'SBI',
-    package_name: 'com.sbi.anywhere',
-    title: 'SBI Transaction Alert',
-    body: 'SBI SMS: ₹50,000 credited to account 1234 from SALARY.',
-  },
-  {
-    label: 'Paytm: Cashback of ₹50 💸',
-    app_name: 'Paytm',
-    package_name: 'net.one97.paytm',
-    title: 'Cashback Received',
-    body: 'Cashback of ₹50 received in Paytm wallet.',
-  },
-  {
-    label: 'Uber Travel: Rs 680 paid 🚗',
-    app_name: 'PhonePe',
-    package_name: 'com.phonepe.app',
-    title: 'Transaction Alert',
-    body: 'Rs 680 paid to Uber India.',
-  },
-  {
-    label: 'Negative: OTP Security Code 🔒 (Should be blocked)',
-    app_name: 'HDFC Bank',
-    package_name: 'com.snapwork.hdfc',
-    title: 'HDFC Bank OTP',
-    body: 'OTP is 556677 for your online transaction. Do not share this with anyone.',
-  },
-];
-
 export default function SmartDetectionSettingsScreen() {
   const { colors } = useTheme();
   const router = useRouter();
@@ -105,7 +53,6 @@ export default function SmartDetectionSettingsScreen() {
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [newKeyword, setNewKeyword] = useState('');
   const [newCatId, setNewCatId] = useState('');
-  const [simIdx, setSimIdx] = useState(0);
 
   // Check Android permission on screen mount
   useEffect(() => {
@@ -188,24 +135,6 @@ export default function SmartDetectionSettingsScreen() {
     updateSmartExpenseSettings({ autoCategorization: mapping });
   };
 
-  const handleSimulate = () => {
-    const sim = SIMULATED_NOTIFICATIONS[simIdx];
-    
-    addRawNotification({
-      notification_id: 'sim_' + Date.now(),
-      app_name: sim.app_name,
-      package_name: sim.package_name,
-      title: sim.title,
-      body: sim.body,
-      timestamp: new Date().toISOString(),
-    });
-
-    if (sim.body.toLowerCase().includes('otp') || sim.body.toLowerCase().includes('password')) {
-      Alert.alert('Security Check 🛡️', 'Simulator: OTP notification parsed. Security filter discarded it correctly (no transaction added).');
-    } else {
-      Alert.alert('Success 🎉', `Simulated notification successfully! Tap Review Queue to inspect suggestions.`);
-    }
-  };
 
   const expenseCategories = categories.filter((c) => c.type === 'expense' && !c.is_deleted);
 
@@ -274,62 +203,12 @@ export default function SmartDetectionSettingsScreen() {
           {Platform.OS !== 'android' && (
             <Card variant="flat" style={[styles.fallbackAlert, { backgroundColor: colors.primaryLight, marginTop: 14 }]}>
               <Text style={{ color: colors.primary, fontSize: 11, fontWeight: '600', lineHeight: 16 }}>
-                Note: Native notification interception is Android-only. Use the Simulator Widget below to test parsing on {Platform.OS}!
+                Note: Native notification interception is Android-only.
               </Text>
             </Card>
           )}
         </Card>
 
-        {/* 2. Simulator Widget */}
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Notification Simulator</Text>
-        <Card variant="outlined" style={styles.simulatorCard}>
-          <Text style={[styles.simulatorTitle, { color: colors.text }]}>Test Parsing Logic 🧪</Text>
-          <Text style={[styles.helpText, { color: colors.textSecondary }]}>
-            Pick a payment app notification example below to simulate transaction parsing.
-          </Text>
-
-          <View style={styles.simSelectorRow}>
-            {SIMULATED_NOTIFICATIONS.map((sim, idx) => (
-              <TouchableOpacity
-                key={idx}
-                style={[
-                  styles.simChip,
-                  { borderColor: colors.border, backgroundColor: simIdx === idx ? colors.primaryLight : colors.card },
-                  simIdx === idx && { borderColor: colors.primary },
-                ]}
-                onPress={() => setSimIdx(idx)}
-              >
-                <Text style={{ color: simIdx === idx ? colors.primary : colors.textSecondary, fontSize: 11, fontWeight: '600' }}>
-                  Mock #{idx+1}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Selected Preview Box */}
-          <View style={[styles.simPreviewBox, { backgroundColor: colors.background }]}>
-            <View style={styles.flexRow}>
-              <Smartphone size={14} color={colors.primary} />
-              <Text style={[styles.simPreviewApp, { color: colors.text }]}>
-                {SIMULATED_NOTIFICATIONS[simIdx].app_name}
-              </Text>
-            </View>
-            <Text style={[styles.simPreviewTitle, { color: colors.text }]}>
-              {SIMULATED_NOTIFICATIONS[simIdx].title}
-            </Text>
-            <Text style={[styles.simPreviewBody, { color: colors.textSecondary }]}>
-              {SIMULATED_NOTIFICATIONS[simIdx].body}
-            </Text>
-          </View>
-
-          <Button
-            title="Simulate SMS/Push Notification"
-            onPress={handleSimulate}
-            variant="primary"
-            style={{ marginTop: 12 }}
-            icon={<Play color="#FFF" size={14} />}
-          />
-        </Card>
 
         {/* 3. Configurable Whitelist Apps */}
         <Text style={[styles.sectionTitle, { color: colors.text }]}>Monitored Package Whitelist</Text>

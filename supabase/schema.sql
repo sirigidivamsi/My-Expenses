@@ -479,3 +479,20 @@ create policy "Users can perform all operations on own credit payments" on publi
 create policy "Users can perform all operations on own credit reminders" on public.credit_reminders for all 
   using (exists(select 1 from public.credits c where c.id = credit_id and c.user_id = auth.uid()));
 create policy "Users can perform all operations on own detected notifications" on public.detected_notifications for all using (auth.uid() = user_id);
+
+-- 20. AUDIT LOGS TABLE
+create table public.audit_logs (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references public.users(id) on delete cascade, -- null allowed for guest actions
+  user_email text,
+  user_name text,
+  action text not null,
+  details jsonb default '{}'::jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+create index idx_audit_logs_user on public.audit_logs(user_id);
+
+alter table public.audit_logs enable row level security;
+
+create policy "Users can perform all operations on own audit logs" on public.audit_logs for all using (auth.uid() = user_id);

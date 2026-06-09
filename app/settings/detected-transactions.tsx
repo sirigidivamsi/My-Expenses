@@ -14,7 +14,7 @@ import {
   Wallet as WalletIcon,
   XCircle,
 } from 'lucide-react-native';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Alert,
   ScrollView,
@@ -35,6 +35,11 @@ export default function DetectedTransactionsQueueScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const { detectedNotifications, categories, wallets, processDetectedTransaction } = useDataStore();
+
+  // Sync native notifications on screen load
+  useEffect(() => {
+    useDataStore.getState().syncDetectedNotifications();
+  }, []);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -180,7 +185,7 @@ export default function DetectedTransactionsQueueScreen() {
             <CheckCircle color={colors.success} size={48} style={{ marginBottom: 14 }} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>All Caught Up! ✨</Text>
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-              There are no new detected transactions in the queue. You can trigger simulated notifications from Settings to test parsing rules.
+              There are no new detected transactions in the queue. Ensure Smart Expense Reader is enabled in Settings to auto-detect payment notifications.
             </Text>
             <Button
               title="Open Settings"

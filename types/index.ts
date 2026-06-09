@@ -150,9 +150,25 @@ export interface SyncQueueItem {
     | 'credits'
     | 'credit_payments'
     | 'credit_reminders'
-    | 'detected_notifications';
+    | 'detected_notifications'
+    | 'audit_logs';
   data: any;
   timestamp: string; // ISO string
+}
+
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  user_email?: string;
+  user_name?: string;
+  action: 
+    | 'TRANSACTION_CREATED' 
+    | 'TRANSACTION_EDITED' 
+    | 'TRANSACTION_DELETED' 
+    | 'CREDIT_CARD_UPDATED' 
+    | 'SAVINGS_GOAL_UPDATED';
+  details: any;
+  created_at: string; // ISO string
 }
 
 // ----------------------------------------------------

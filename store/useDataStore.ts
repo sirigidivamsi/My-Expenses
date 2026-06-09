@@ -23,6 +23,7 @@ import {
   CreditReminder,
   DetectedTransaction,
   SmartExpenseSettings,
+  AuditLog,
 } from '../types';
 import { useAuthStore } from './useAuthStore';
 import { useSyncStore } from './useSyncStore';
@@ -32,6 +33,8 @@ import {
   cancelScheduledNotification,
 } from '../services/notifications';
 import { generateUuid, isUuid } from '../utils/id';
+import { Platform } from 'react-native';
+import ExpoNotificationListener from '../modules/expo-notification-listener';
 
 
 interface DataState {
@@ -58,6 +61,7 @@ interface DataState {
   creditReminders: CreditReminder[];
   detectedNotifications: DetectedTransaction[];
   smartExpenseSettings: SmartExpenseSettings;
+  auditLogs: AuditLog[];
 
   // Wallets Actions
   addWallet: (wallet: Omit<Wallet, 'id' | 'user_id' | 'is_deleted'>) => void;
@@ -130,6 +134,7 @@ interface DataState {
   addRawNotification: (raw: Omit<DetectedTransaction, 'id' | 'user_id' | 'status' | 'amount' | 'merchant' | 'transaction_type' | 'created_at'>) => void;
   processDetectedTransaction: (id: string, action: 'save' | 'ignore', editedTxData?: Partial<Transaction>) => void;
   updateSmartExpenseSettings: (updates: Partial<SmartExpenseSettings>) => void;
+  syncDetectedNotifications: () => void;
 
   // Sync helpers
   loadRemoteData: (data: {
@@ -151,6 +156,7 @@ interface DataState {
     creditPayments?: CreditPayment[];
     creditReminders?: CreditReminder[];
     detectedNotifications?: DetectedTransaction[];
+    auditLogs?: AuditLog[];
   }) => void;
   normalizeLegacyIds: () => void;
   clearAllLocalData: () => void;
@@ -203,6 +209,26 @@ export const useDataStore = create<DataState>()(
         if (!isGuest()) {
           useSyncStore.getState().addToQueue(action, table, data);
         }
+      };
+
+      const logAction = (action: AuditLog['action'], details: any) => {
+        const userId = getUserId();
+        const authUser = useAuthStore.getState().user;
+        const userEmail = authUser ? authUser.email : null;
+        const userName = authUser ? authUser.name : null;
+
+        const newLog: AuditLog = {
+          id: generateUuid(),
+          user_id: userId,
+          user_email: userEmail || undefined,
+          user_name: userName || undefined,
+          action,
+          details,
+          created_at: new Date().toISOString(),
+        };
+
+        set((state) => ({ auditLogs: [...state.auditLogs, newLog] }));
+        queueSync('INSERT', 'audit_logs', newLog);
       };
 
       const defaultCategoryIdSet = new Set(DEFAULT_CATEGORIES.map((category) => category.id));
@@ -278,6 +304,7 @@ export const useDataStore = create<DataState>()(
         creditPayments: [],
         creditReminders: [],
         detectedNotifications: [],
+        auditLogs: [],
         smartExpenseSettings: {
           enabled: false,
           supportedApps: [
@@ -472,6 +499,7 @@ export const useDataStore = create<DataState>()(
 
           set((state) => ({ transactions: [...state.transactions, newTx] }));
           queueSync('INSERT', 'transactions', newTx);
+          logAction('TRANSACTION_CREATED', { id: newTx.id, amount: newTx.amount, type: newTx.type });
 
           // Check Budgets and notify
           if (txData.type === 'expense') {
@@ -539,6 +567,7 @@ export const useDataStore = create<DataState>()(
           }
 
           queueSync('UPDATE', 'transactions', updatedTx);
+          logAction('TRANSACTION_EDITED', { id, prevAmount: prevTx.amount, newAmount: updates.amount !== undefined ? updates.amount : prevTx.amount });
         },
 
         deleteTransaction: (id) => {
@@ -562,6 +591,7 @@ export const useDataStore = create<DataState>()(
           if (deletedTx) {
             queueSync('UPDATE', 'transactions', deletedTx);
           }
+          logAction('TRANSACTION_DELETED', { id, amount: prevTx.amount });
         },
 
         // BUDGETS
@@ -630,6 +660,7 @@ export const useDataStore = create<DataState>()(
           if (updatedGoal) {
             queueSync('UPDATE', 'savings_goals', updatedGoal);
           }
+          logAction('SAVINGS_GOAL_UPDATED', { id, updates });
         },
 
         deleteGoal: (id) => {
@@ -797,6 +828,7 @@ export const useDataStore = create<DataState>()(
                 color: updatedCard.card_color,
               });
             }
+            logAction('CREDIT_CARD_UPDATED', { id, updates });
           }
         },
 
@@ -1638,6 +1670,23 @@ export const useDataStore = create<DataState>()(
           }));
         },
 
+        syncDetectedNotifications: () => {
+          if (Platform.OS !== 'android') return;
+          try {
+            const pendingStr = ExpoNotificationListener.getPendingNotifications();
+            if (!pendingStr || pendingStr === '[]') return;
+
+            const pending = JSON.parse(pendingStr);
+            if (Array.isArray(pending) && pending.length > 0) {
+              pending.forEach((notification: any) => {
+                get().addRawNotification(notification);
+              });
+            }
+          } catch (error) {
+            console.error('Error syncing native notifications:', error);
+          }
+        },
+
         normalizeLegacyIds: () => {
           const currentUserId = getUserId();
           const state = get();
@@ -1663,6 +1712,7 @@ export const useDataStore = create<DataState>()(
           state.creditPayments.forEach((item) => registerIfInvalidUuid(idMap, item.id));
           state.creditReminders.forEach((item) => registerIfInvalidUuid(idMap, item.id));
           state.detectedNotifications.forEach((item) => registerIfInvalidUuid(idMap, item.id));
+          state.auditLogs.forEach((item) => registerIfInvalidUuid(idMap, item.id));
           syncStore.pendingQueue.forEach((item) => {
             if (item.data && typeof item.data === 'object') {
               registerIfInvalidUuid(idMap, item.data.id);
@@ -1687,6 +1737,7 @@ export const useDataStore = create<DataState>()(
               state.subscriptions.some((item) => item.user_id === 'guest') ||
               state.credits.some((item) => item.user_id === 'guest') ||
               state.detectedNotifications.some((item) => item.user_id === 'guest') ||
+              state.auditLogs.some((item) => item.user_id === 'guest') ||
               syncStore.pendingQueue.some((item) => {
                 if (!item.data || typeof item.data !== 'object') return false;
                 if (item.data.user_id === 'guest') return true;
@@ -1908,6 +1959,22 @@ export const useDataStore = create<DataState>()(
               }
             });
 
+            state.auditLogs.forEach((item) => {
+              if (item.user_id === 'guest') {
+                const authUser = useAuthStore.getState().user;
+                const userEmail = authUser ? authUser.email : null;
+                const userName = authUser ? authUser.name : null;
+                const mapped = {
+                  ...item,
+                  id: getMappedId(idMap, item.id) || item.id,
+                  user_id: currentUserId,
+                  user_email: userEmail || undefined,
+                  user_name: userName || undefined,
+                };
+                queueSync('INSERT', 'audit_logs', mapped);
+              }
+            });
+
             const currentPrefs = useAuthStore.getState().preferences;
             if (currentPrefs && currentPrefs.user_id === 'guest') {
               const mappedPrefs = {
@@ -2025,6 +2092,13 @@ export const useDataStore = create<DataState>()(
               ...dn,
               id: getMappedId(idMap, dn.id) || dn.id,
               user_id: normalizeUserId(dn.user_id, currentUserId) || dn.user_id,
+            })),
+            auditLogs: state.auditLogs.map((log) => ({
+              ...log,
+              id: getMappedId(idMap, log.id) || log.id,
+              user_id: normalizeUserId(log.user_id, currentUserId) || log.user_id,
+              user_email: useAuthStore.getState().user?.email || log.user_email,
+              user_name: useAuthStore.getState().user?.name || log.user_name,
             })),
           });
 
@@ -2274,6 +2348,22 @@ export const useDataStore = create<DataState>()(
                 ]
               : migratedDetected;
 
+            // 11. Audit Logs Migration
+            const migratedAuditLogs = state.auditLogs.map((log) => {
+              if (log.user_id === 'guest') {
+                const authUser = useAuthStore.getState().user;
+                const updated = {
+                  ...log,
+                  user_id: currentUserId,
+                  user_email: authUser?.email || undefined,
+                  user_name: authUser?.name || undefined,
+                };
+                queueSync('INSERT', 'audit_logs', updated);
+                return updated;
+              }
+              return log;
+            });
+
             return {
               wallets: finalWallets,
               categories: remote.categories
@@ -2295,6 +2385,7 @@ export const useDataStore = create<DataState>()(
               creditPayments: finalCreditPayments,
               creditReminders: finalCreditReminders,
               detectedNotifications: finalDetected,
+              auditLogs: migratedAuditLogs,
             };
           });
         },
@@ -2412,6 +2503,7 @@ export const useDataStore = create<DataState>()(
             creditPayments: [],
             creditReminders: [],
             detectedNotifications: [],
+            auditLogs: [],
           });
         },
       };

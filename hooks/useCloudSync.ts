@@ -37,6 +37,8 @@ export const useCloudSync = () => {
   const isGuest = useAuthStore((state) => state.isGuest);
 
   const pendingQueue = useSyncStore((state) => state.pendingQueue);
+  const isOnline = useSyncStore((state) => state.isOnline);
+  const syncTrigger = useSyncStore((state) => state.syncTrigger);
   const isSyncing = useSyncStore((state) => state.isSyncing);
   const setOnline = useSyncStore((state) => state.setOnline);
   const setSyncing = useSyncStore((state) => state.setSyncing);
@@ -186,6 +188,10 @@ export const useCloudSync = () => {
       return;
     }
 
+    if (!isOnline) {
+      return;
+    }
+
     if (syncInProgress.current) {
       return;
     }
@@ -205,17 +211,10 @@ export const useCloudSync = () => {
           if (error) {
             console.error('Sync error for item:', item, error);
             
-            // Check if it's a database constraint or syntax error (client side / RLS error)
-            const isDatabaseOrClientError =
-              error.code ||
-              (error.status && error.status >= 400 && error.status < 500);
-
-            if (isDatabaseOrClientError) {
-              console.warn(`Discarding un-syncable queue item ${item.id} due to DB error:`, error.message);
-              removeFromQueue(item.id);
-              continue;
-            }
-
+            // In fintech apps, data integrity is critical. We must NOT silently discard 
+            // records on database/constraint errors as this leads to permanent data loss. 
+            // Instead, we pause the sync queue (setOnline(false)) so the data remains 
+            // safe locally on the device until the connection is restored or a patch resolves the issue.
             setOnline(false);
             return;
           }
@@ -242,6 +241,8 @@ export const useCloudSync = () => {
     user?.id,
     isGuest,
     pendingQueue.length,
+    isOnline,
+    syncTrigger,
     normalizeLegacyIds,
     removeFromQueue,
     setOnline,

@@ -52,18 +52,70 @@ export const useAuthStore = create<AuthState>()(
           const name = session.user.user_metadata?.name || session.user.user_metadata?.full_name || 'Valued User';
           const fullName = session.user.user_metadata?.full_name || name;
           
+          const userProfile: User = {
+            id: session.user.id,
+            name,
+            full_name: fullName,
+            email: session.user.email,
+            avatar_url: session.user.user_metadata?.avatar_url,
+            auth_provider: provider === 'google' ? 'google' : 'email',
+          };
+
           set({
             session,
-            user: {
-              id: session.user.id,
-              name,
-              full_name: fullName,
-              email: session.user.email,
-              avatar_url: session.user.user_metadata?.avatar_url,
-              auth_provider: provider === 'google' ? 'google' : 'email',
-            },
+            user: userProfile,
             isGuest: false,
           });
+
+          // Proactively check and ensure user profile exists in database
+          supabase
+            .from('users')
+            .select('id')
+            .eq('id', session.user.id)
+            .single()
+            .then(({ data: existingUser }) => {
+              if (!existingUser) {
+                console.log('User profile missing in database on setSession, creating...');
+                supabase
+                  .from('users')
+                  .insert({
+                    id: session.user.id,
+                    name: userProfile.name,
+                    full_name: userProfile.full_name,
+                    email: userProfile.email,
+                    avatar_url: userProfile.avatar_url,
+                    auth_provider: userProfile.auth_provider,
+                  })
+                  .then(({ error }) => {
+                    if (error) console.error('Failed to insert user profile on setSession:', error);
+                  });
+              }
+            });
+
+          // Proactively check and ensure user preferences exist in database
+          supabase
+            .from('user_preferences')
+            .select('user_id')
+            .eq('user_id', session.user.id)
+            .single()
+            .then(({ data: existingPrefs }) => {
+              if (!existingPrefs) {
+                console.log('User preferences missing in database on setSession, creating...');
+                supabase
+                  .from('user_preferences')
+                  .insert({
+                    user_id: session.user.id,
+                    theme: 'system',
+                    currency: 'INR',
+                    notifications_enabled: true,
+                    recurring_reminders: true,
+                    budget_alerts: true,
+                  })
+                  .then(({ error }) => {
+                    if (error) console.error('Failed to insert user preferences on setSession:', error);
+                  });
+              }
+            });
         }
       },
 
@@ -257,6 +309,34 @@ export const useAuthStore = create<AuthState>()(
                   ...DEFAULT_PREFERENCES,
                   user_id: session.user.id,
                 };
+
+            // Ensure profile exists in database if auth trigger didn't run
+            if (!profileRes.data) {
+              console.log('User profile missing in database on initializeAuth, creating...');
+              const { error } = await supabase.from('users').insert({
+                id: session.user.id,
+                name: userProfile.name,
+                full_name: userProfile.full_name,
+                email: userProfile.email,
+                avatar_url: userProfile.avatar_url,
+                auth_provider: userProfile.auth_provider,
+              });
+              if (error) console.error('Failed to insert user profile on initializeAuth:', error);
+            }
+
+            // Ensure preferences exist in database if auth trigger didn't run
+            if (!prefsRes.data) {
+              console.log('User preferences missing in database on initializeAuth, creating...');
+              const { error } = await supabase.from('user_preferences').insert({
+                user_id: session.user.id,
+                theme: userPrefs.theme,
+                currency: userPrefs.currency,
+                notifications_enabled: userPrefs.notifications_enabled,
+                recurring_reminders: userPrefs.recurring_reminders,
+                budget_alerts: userPrefs.budget_alerts,
+              });
+              if (error) console.error('Failed to insert user preferences on initializeAuth:', error);
+            }
 
             set({
               user: userProfile,

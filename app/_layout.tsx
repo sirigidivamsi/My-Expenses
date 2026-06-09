@@ -2,11 +2,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, AppState, AppStateStatus } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useCloudSync } from '../hooks/useCloudSync';
 import { useTheme } from '../hooks/useTheme';
 import { useAuthStore } from '../store/useAuthStore';
+import { useDataStore } from '../store/useDataStore';
 import { scheduleDailyReminder } from '../services/notifications';
 
 // Initialize React Query Client
@@ -33,6 +34,30 @@ function RootLayoutNav() {
   useEffect(() => {
     initializeAuth();
     scheduleDailyReminder();
+  }, []);
+
+  // Poll native notifications and listen for foreground AppState transitions
+  useEffect(() => {
+    // 1. Run sync on mount
+    useDataStore.getState().syncDetectedNotifications();
+
+    // 2. Set up interval polling (every 10 seconds)
+    const interval = setInterval(() => {
+      useDataStore.getState().syncDetectedNotifications();
+    }, 10000);
+
+    // 3. Set up app state listener to sync immediately when user opens/returns to the app
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        useDataStore.getState().syncDetectedNotifications();
+      }
+    };
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      clearInterval(interval);
+      appStateSubscription.remove();
+    };
   }, []);
 
   // Secure Route Gatekeeper

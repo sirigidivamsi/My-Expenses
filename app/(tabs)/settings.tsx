@@ -36,7 +36,7 @@ export default function SettingsScreen() {
   
   const { user, isGuest, preferences, updatePreferences, signOut } = useAuthStore();
   const { clearAllLocalData, transactions, detectedNotifications } = useDataStore();
-  const { pendingQueue, clearQueue, isOnline, isSyncing } = useSyncStore();
+  const { pendingQueue, clearQueue, isOnline, isSyncing, triggerSync } = useSyncStore();
 
   const handleThemeChange = (mode: 'light' | 'dark' | 'system') => {
     updatePreferences({ theme: mode });
@@ -123,6 +123,47 @@ export default function SettingsScreen() {
               <Text style={[styles.ctaBtnText, { color: colors.primary }]}>CREATE ACCOUNT</Text>
             </TouchableOpacity>
           </Card>
+        </View>
+      )}
+
+      {/* Sync Warning Banner */}
+      {!isGuest && pendingQueue.length > 0 && (
+        <View style={styles.section}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => {
+              if (isSyncing) return;
+              triggerSync();
+              Alert.alert('Sync Started 🔄', 'Attempting to sync your local database to the cloud...');
+            }}
+          >
+            <Card 
+              variant="flat" 
+              style={[
+                styles.warningCard, 
+                { 
+                  backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : '#FFFBEB', 
+                  borderColor: colors.warning,
+                }
+              ]}
+            >
+              <View style={styles.row}>
+                <CloudLightning color={colors.warning} size={22} style={{ marginRight: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.warningTitle, { color: colors.warning }]}>
+                    Cloud Sync Pending ⚠️
+                  </Text>
+                  <Text style={[styles.warningDesc, { color: colors.text }]}>
+                    You have <Text style={{ fontWeight: '800' }}>{pendingQueue.length}</Text> record{pendingQueue.length > 1 ? 's' : ''} stored locally on this device that {!isOnline ? 'cannot' : 'have not'} be uploaded to the cloud database.
+                    {isSyncing ? ' Sync in progress...' : ' Tap this card to try syncing now.'}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 6 }}>
+                    Total local database: {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -383,5 +424,19 @@ const styles = StyleSheet.create({
   actionRowText: {
     fontSize: 14,
     fontWeight: '600',
+  },
+  warningCard: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 16,
+  },
+  warningTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  warningDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
   },
 });

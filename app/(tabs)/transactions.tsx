@@ -8,8 +8,10 @@ import {
   SlidersHorizontal,
   Trash2,
   Pencil,
+  FileText,
 } from 'lucide-react-native';
 import React, { useMemo, useState, useEffect } from 'react';
+import { exportTransactionsToPDF } from '../../utils/pdfExport';
 import {
   Alert,
   FlatList,
@@ -45,6 +47,59 @@ export default function TransactionsScreen() {
       setShowFilters(true);
     }
   }, [categoryId]);
+
+  const handleExportPress = () => {
+    Alert.alert(
+      'Export PDF Report 📄',
+      'Select which ledger entries you wish to export to a PDF document:',
+      [
+        {
+          text: 'Current Month Only',
+          onPress: async () => {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            
+            const currentMonthTxs = activeTransactions.filter((t) => {
+              const tDate = new Date(t.date);
+              return tDate.getFullYear() === currentYear && tDate.getMonth() === currentMonth;
+            });
+
+            if (currentMonthTxs.length === 0) {
+              Alert.alert('No Transactions', 'You have no transactions recorded in the current month.');
+              return;
+            }
+
+            const monthName = now.toLocaleString('default', { month: 'long' });
+            await exportTransactionsToPDF(
+              currentMonthTxs,
+              categories,
+              `Transactions Ledger - ${monthName} ${currentYear}`
+            );
+          },
+        },
+        {
+          text: 'Total Transactions (All-Time)',
+          onPress: async () => {
+            if (activeTransactions.length === 0) {
+              Alert.alert('No Transactions', 'There are no active transactions in your database.');
+              return;
+            }
+
+            await exportTransactionsToPDF(
+              activeTransactions,
+              categories,
+              'Complete Transactions Ledger'
+            );
+          },
+        },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+      ]
+    );
+  };
 
   const activeTransactions = useMemo(() => {
     return transactions.filter((t) => !t.is_deleted);
@@ -131,6 +186,13 @@ export default function TransactionsScreen() {
             style={{ height: 44 }}
           />
         </View>
+        <TouchableOpacity
+          style={[styles.filterToggle, { backgroundColor: colors.card, borderColor: colors.border, marginRight: 8 }]}
+          onPress={handleExportPress}
+        >
+          <FileText color={colors.primary} size={18} />
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={[styles.filterToggle, { backgroundColor: colors.card, borderColor: colors.border }]}
           onPress={() => setShowFilters(!showFilters)}
