@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Calendar, DollarSign, Receipt, Tag, ArrowLeft } from 'lucide-react-native';
 import React, { useMemo, useState } from 'react';
 import {
@@ -22,6 +22,7 @@ import { useDataStore } from '../../store/useDataStore';
 export default function AddTransactionScreen() {
   const { colors } = useTheme();
   const router = useRouter();
+  const { wallet_id } = useLocalSearchParams<{ wallet_id?: string }>();
   
   const { categories, wallets, addTransaction } = useDataStore();
 
@@ -50,12 +51,19 @@ export default function AddTransactionScreen() {
 
   // Default selections
   React.useEffect(() => {
+    if (wallet_id) {
+      const targetWallet = wallets.find((w) => w.id === wallet_id && !w.is_deleted);
+      if (targetWallet) {
+        setSelectedWalletId(targetWallet.id);
+        return;
+      }
+    }
     const activeWallets = wallets.filter((w) => !w.is_deleted);
     if (activeWallets.length > 0) {
       const defaultWallet = activeWallets.find((w) => w.name === 'Main Bank Account' || w.type === 'bank') || activeWallets[0];
       setSelectedWalletId(defaultWallet.id);
     }
-  }, [wallets]);
+  }, [wallets, wallet_id]);
 
   const activeCategories = useMemo(() => {
     return categories.filter((c) => c.type === type && !c.is_deleted);

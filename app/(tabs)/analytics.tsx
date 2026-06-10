@@ -1,7 +1,6 @@
-import { FileText, Info, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Info, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +14,7 @@ import { Button } from '../../components/common/Button';
 import { DonutChart, IncomeExpenseBarChart } from '../../components/charts/InteractiveCharts';
 import { useTheme } from '../../hooks/useTheme';
 import { useDataStore } from '../../store/useDataStore';
-import { generateCSVReport } from '../../utils/export';
+
 
 export default function AnalyticsScreen() {
   const { colors } = useTheme();
@@ -270,19 +269,7 @@ export default function AnalyticsScreen() {
     });
   };
 
-  const handleExport = () => {
-    try {
-      const csvContent = generateCSVReport(activeTransactions, categories);
-      Alert.alert(
-        'Export Report Successful 📈',
-        'Your monthly transaction ledger has been exported successfully in CSV format.\n\nTransactions exported: ' +
-          activeTransactions.length,
-        [{ text: 'Great!' }]
-      );
-    } catch (e: any) {
-      Alert.alert('Export Failed', e.message);
-    }
-  };
+
 
   return (
     <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], flex: 1 }}>

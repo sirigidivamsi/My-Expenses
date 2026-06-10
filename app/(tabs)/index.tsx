@@ -31,7 +31,7 @@ import { useDataStore } from '../../store/useDataStore';
 export default function DashboardScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  
+
   const { isGuest, signOut } = useAuthStore();
   const {
     wallets,
@@ -98,8 +98,9 @@ export default function DashboardScreen() {
       })
       .reduce((sum, t) => sum + Number(t.amount), 0);
 
-    const { cashAndBank, netWorth } = getFinancialMetrics();
-    const totalBalance = includeCreditCards ? netWorth : cashAndBank;
+    const { cashAndBank, totalCreditCardDebt } = getFinancialMetrics();
+    // Total Balance = wallet balances only (income - expenses), excluding savings plans (RD, Gold, SIP etc.)
+    const totalBalance = includeCreditCards ? (cashAndBank - totalCreditCardDebt) : cashAndBank;
 
     const savings = Math.max(0, totalIncome - totalExpense);
 
@@ -233,240 +234,240 @@ export default function DashboardScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
-      {/* Guest Mode Upgrade Banner */}
-      {isGuest && (
-        <View style={[styles.upgradeBanner, { backgroundColor: colors.primary }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.upgradeTitle}>Upgrade Account 🚀</Text>
-            <Text style={styles.upgradeSub}>Secure remote backups and cloud sync.</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.upgradeBtn}
-            onPress={() => {
-              signOut(); // Log out from guest state to redirect back to auth register
-            }}
-          >
-            <Text style={[styles.upgradeBtnText, { color: colors.primary }]}>SIGN UP</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Main Balance Card */}
-      <View style={styles.statsContainer}>
-        <Card variant="elevated" style={[styles.balanceCard, { backgroundColor: colors.card }]}>
-          <View style={styles.row}>
-            <View>
-              <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Total Balance</Text>
-              <Text style={[styles.balanceText, { color: colors.text }]}>
-                ₹{stats.totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </Text>
-            </View>
-            <View style={[styles.balanceIcon, { backgroundColor: colors.primaryLight }]}>
-              <WalletIcon color={colors.primary} size={24} />
-            </View>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: colors.border }]} />
-
-          <View style={styles.row}>
+        {/* Guest Mode Upgrade Banner */}
+        {isGuest && (
+          <View style={[styles.upgradeBanner, { backgroundColor: colors.primary }]}>
             <View style={{ flex: 1 }}>
-              <View style={styles.metricRow}>
-                <ArrowDownRight color={colors.success} size={16} />
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Income</Text>
+              <Text style={styles.upgradeTitle}>Upgrade Account 🚀</Text>
+              <Text style={styles.upgradeSub}>Secure remote backups and cloud sync.</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.upgradeBtn}
+              onPress={() => {
+                signOut(); // Log out from guest state to redirect back to auth register
+              }}
+            >
+              <Text style={[styles.upgradeBtnText, { color: colors.primary }]}>SIGN UP</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Main Balance Card */}
+        <View style={styles.statsContainer}>
+          <Card variant="elevated" style={[styles.balanceCard, { backgroundColor: colors.card }]}>
+            <View style={styles.row}>
+              <View>
+                <Text style={[styles.balanceLabel, { color: colors.textSecondary }]}>Total Balance</Text>
+                <Text style={[styles.balanceText, { color: colors.text }]}>
+                  ₹{stats.totalBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </Text>
               </View>
-              <Text style={[styles.metricVal, { color: colors.success }]}>
-                ₹{stats.totalIncome.toLocaleString('en-IN')}
-              </Text>
+              <View style={[styles.balanceIcon, { backgroundColor: colors.primaryLight }]}>
+                <WalletIcon color={colors.primary} size={24} />
+              </View>
             </View>
 
-            <View style={{ flex: 1, paddingLeft: 16 }}>
-              <View style={styles.metricRow}>
-                <ArrowUpRight color={colors.error} size={16} />
-                <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Expenses</Text>
-              </View>
-              <Text style={[styles.metricVal, { color: colors.error }]}>
-                ₹{stats.totalExpense.toLocaleString('en-IN')}
-              </Text>
-            </View>
-          </View>
-        </Card>
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
-        {/* Credit Card Filter Toggle */}
-        <TouchableOpacity
-          style={[styles.filterRow, { backgroundColor: colors.card, borderColor: colors.border }]}
-          onPress={() => setIncludeCreditCards(!includeCreditCards)}
-        >
-          <View style={[
-            styles.checkbox,
-            {
-              borderColor: colors.primary,
-              backgroundColor: includeCreditCards ? colors.primary : 'transparent'
-            }
-          ]}>
-            {includeCreditCards && <Check color="#FFF" size={12} />}
-          </View>
-          <Text style={[styles.filterLabel, { color: colors.text }]}>Include Credit Card Expenses</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Monthly Budget Summary Widget */}
-      {budgetProgress.totalBudget > 0 && (
-        <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/budgets')}>
-            <Card variant="outlined" style={styles.budgetCard}>
-              <View style={styles.rowJustified}>
-                <View style={styles.flexRow}>
-                  <Zap color={colors.primary} size={16} style={{ marginRight: 6 }} />
-                  <Text style={[styles.budgetWidgetTitle, { color: colors.text }]}>
-                    Monthly Budget Progress
-                  </Text>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.metricRow}>
+                  <ArrowDownRight color={colors.success} size={16} />
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Income</Text>
                 </View>
-                <Text style={[styles.budgetWidgetPercent, { color: colors.primary }]}>
-                  {Math.round(budgetProgress.percentage * 100)}%
+                <Text style={[styles.metricVal, { color: colors.success }]}>
+                  ₹{stats.totalIncome.toLocaleString('en-IN')}
                 </Text>
-              </View>
-              
-              <View style={[styles.progressBarBG, { backgroundColor: colors.border, marginTop: 10 }]}>
-                <View
-                  style={[
-                    styles.progressBarFill,
-                    {
-                      backgroundColor: budgetProgress.percentage >= 1 ? colors.error : colors.primary,
-                      width: `${Math.min(100, budgetProgress.percentage * 100)}%`,
-                    },
-                  ]}
-                />
               </View>
 
-              <View style={[styles.rowJustified, { marginTop: 8 }]}>
-                <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
-                  Spent ₹{budgetProgress.totalSpent.toLocaleString()} of ₹{budgetProgress.totalBudget.toLocaleString()}
-                </Text>
-                <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '700' }}>
-                  ₹{budgetProgress.remaining.toLocaleString()} left
+              <View style={{ flex: 1, paddingLeft: 16 }}>
+                <View style={styles.metricRow}>
+                  <ArrowUpRight color={colors.error} size={16} />
+                  <Text style={[styles.metricLabel, { color: colors.textSecondary }]}>Expenses</Text>
+                </View>
+                <Text style={[styles.metricVal, { color: colors.error }]}>
+                  ₹{stats.totalExpense.toLocaleString('en-IN')}
                 </Text>
               </View>
-            </Card>
+            </View>
+          </Card>
+
+          {/* Credit Card Filter Toggle */}
+          <TouchableOpacity
+            style={[styles.filterRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+            onPress={() => setIncludeCreditCards(!includeCreditCards)}
+          >
+            <View style={[
+              styles.checkbox,
+              {
+                borderColor: colors.primary,
+                backgroundColor: includeCreditCards ? colors.primary : 'transparent'
+              }
+            ]}>
+              {includeCreditCards && <Check color="#FFF" size={12} />}
+            </View>
+            <Text style={[styles.filterLabel, { color: colors.text }]}>Include Credit Card Expenses</Text>
           </TouchableOpacity>
         </View>
-      )}
 
-      {/* Quick Actions Grid */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
-      </View>
-      <View style={styles.actionGrid}>
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push('/transaction/add')}
-        >
-          <PlusCircle color={colors.primary} size={24} style={{ marginBottom: 6 }} />
-          <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Add Expense</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push('/(tabs)/budgets')}
-        >
-          <TrendingUp color={colors.accent} size={24} style={{ marginBottom: 6 }} />
-          <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Budgets</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.card }]}
-          onPress={() => router.push('/credit-cards')}
-        >
-          <CreditCard color={colors.purple} size={24} style={{ marginBottom: 6 }} />
-          <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Cards</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.actionBtn, { backgroundColor: colors.card, marginRight: 0 }]}
-          onPress={() => router.push('/subscriptions')}
-        >
-          <Tv color={colors.success} size={24} style={{ marginBottom: 6 }} />
-          <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Bills</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Charts Section */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Weekly Spending Trend</Text>
-      </View>
-      <View style={styles.chartContainer}>
-        <Card variant="flat" style={{ backgroundColor: colors.card }}>
-          <WeeklyTrendChart data={weeklyTrendData} />
-        </Card>
-      </View>
-
-      {/* Smart Insights Cards */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Smart Insights</Text>
-      </View>
-      <View style={styles.insightsList}>
-        {insights.map((insight, idx) => (
-          <Card key={idx} variant="outlined" style={[styles.insightCard, { borderColor: insight.color }]}>
-            <View style={styles.insightHeader}>
-              <Zap color={insight.color} size={18} style={{ marginRight: 8 }} />
-              <Text style={[styles.insightTitle, { color: colors.text }]}>{insight.title}</Text>
-            </View>
-            <Text style={[styles.insightDesc, { color: colors.textSecondary }]}>{insight.desc}</Text>
-          </Card>
-        ))}
-      </View>
-
-      {/* Recent Transactions List */}
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/transactions')}>
-          <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>VIEW ALL</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.listContainer}>
-        {recentTransactions.length === 0 ? (
-          <Card variant="flat" style={[styles.emptyCard, { backgroundColor: colors.card }]}>
-            <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
-              No transactions added yet.
-            </Text>
-          </Card>
-        ) : (
-          recentTransactions.map((item) => {
-            const cat = useDataStore.getState().categories.find((c) => c.id === item.category_id);
-            return (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.txItem, { borderBottomColor: colors.border }]}
-                onPress={() => router.push({ pathname: '/transaction/edit', params: { id: item.id } })}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.txName, { color: colors.text }]}>{cat?.name || 'Uncategorized'}</Text>
-                  <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
-                    {new Date(item.date).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                    })}{' '}
-                    • {item.payment_method}
+        {/* Monthly Budget Summary Widget */}
+        {budgetProgress.totalBudget > 0 && (
+          <View style={{ paddingHorizontal: 16, marginTop: 16 }}>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/budgets')}>
+              <Card variant="outlined" style={styles.budgetCard}>
+                <View style={styles.rowJustified}>
+                  <View style={styles.flexRow}>
+                    <Zap color={colors.primary} size={16} style={{ marginRight: 6 }} />
+                    <Text style={[styles.budgetWidgetTitle, { color: colors.text }]}>
+                      Monthly Budget Progress
+                    </Text>
+                  </View>
+                  <Text style={[styles.budgetWidgetPercent, { color: colors.primary }]}>
+                    {Math.round(budgetProgress.percentage * 100)}%
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text
+
+                <View style={[styles.progressBarBG, { backgroundColor: colors.border, marginTop: 10 }]}>
+                  <View
                     style={[
-                      styles.txAmount,
-                      { color: item.type === 'income' ? colors.success : colors.error, marginRight: 8 },
+                      styles.progressBarFill,
+                      {
+                        backgroundColor: budgetProgress.percentage >= 1 ? colors.error : colors.primary,
+                        width: `${Math.min(100, budgetProgress.percentage * 100)}%`,
+                      },
                     ]}
-                  >
-                    {item.type === 'income' ? '+' : '-'}₹{Number(item.amount).toFixed(0)}
-                  </Text>
-                  <ChevronRight color={colors.textSecondary} size={16} />
+                  />
                 </View>
-              </TouchableOpacity>
-            );
-          })
+
+                <View style={[styles.rowJustified, { marginTop: 8 }]}>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                    Spent ₹{budgetProgress.totalSpent.toLocaleString()} of ₹{budgetProgress.totalBudget.toLocaleString()}
+                  </Text>
+                  <Text style={{ color: colors.textSecondary, fontSize: 11, fontWeight: '700' }}>
+                    ₹{budgetProgress.remaining.toLocaleString()} left
+                  </Text>
+                </View>
+              </Card>
+            </TouchableOpacity>
+          </View>
         )}
-      </View>
-      <View style={{ height: 40 }} />
-    </ScrollView>
+
+        {/* Quick Actions Grid */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Quick Actions</Text>
+        </View>
+        <View style={styles.actionGrid}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/transaction/add')}
+          >
+            <PlusCircle color={colors.primary} size={24} style={{ marginBottom: 6 }} />
+            <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Add Expense</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/(tabs)/budgets')}
+          >
+            <TrendingUp color={colors.accent} size={24} style={{ marginBottom: 6 }} />
+            <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Budgets</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.card }]}
+            onPress={() => router.push('/credit-cards')}
+          >
+            <CreditCard color={colors.purple} size={24} style={{ marginBottom: 6 }} />
+            <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Cards</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: colors.card, marginRight: 0 }]}
+            onPress={() => router.push('/subscriptions')}
+          >
+            <Tv color={colors.success} size={24} style={{ marginBottom: 6 }} />
+            <Text style={[styles.actionText, { color: colors.text, fontSize: 10 }]}>Bills</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Charts Section */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Weekly Spending Trend</Text>
+        </View>
+        <View style={styles.chartContainer}>
+          <Card variant="flat" style={{ backgroundColor: colors.card }}>
+            <WeeklyTrendChart data={weeklyTrendData} />
+          </Card>
+        </View>
+
+        {/* Smart Insights Cards */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Smart Insights</Text>
+        </View>
+        <View style={styles.insightsList}>
+          {insights.map((insight, idx) => (
+            <Card key={idx} variant="outlined" style={[styles.insightCard, { borderColor: insight.color }]}>
+              <View style={styles.insightHeader}>
+                <Zap color={insight.color} size={18} style={{ marginRight: 8 }} />
+                <Text style={[styles.insightTitle, { color: colors.text }]}>{insight.title}</Text>
+              </View>
+              <Text style={[styles.insightDesc, { color: colors.textSecondary }]}>{insight.desc}</Text>
+            </Card>
+          ))}
+        </View>
+
+        {/* Recent Transactions List */}
+        <View style={styles.sectionHeader}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Transactions</Text>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/transactions')}>
+            <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>VIEW ALL</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.listContainer}>
+          {recentTransactions.length === 0 ? (
+            <Card variant="flat" style={[styles.emptyCard, { backgroundColor: colors.card }]}>
+              <Text style={{ color: colors.textSecondary, textAlign: 'center' }}>
+                No transactions added yet.
+              </Text>
+            </Card>
+          ) : (
+            recentTransactions.map((item) => {
+              const cat = useDataStore.getState().categories.find((c) => c.id === item.category_id);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.txItem, { borderBottomColor: colors.border }]}
+                  onPress={() => router.push({ pathname: '/transaction/edit', params: { id: item.id } })}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.txName, { color: colors.text }]}>{cat?.name || 'Uncategorized'}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 11, marginTop: 2 }}>
+                      {new Date(item.date).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                      })}{' '}
+                      • {item.payment_method}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text
+                      style={[
+                        styles.txAmount,
+                        { color: item.type === 'income' ? colors.success : colors.error, marginRight: 8 },
+                      ]}
+                    >
+                      {item.type === 'income' ? '+' : '-'}₹{Number(item.amount).toFixed(0)}
+                    </Text>
+                    <ChevronRight color={colors.textSecondary} size={16} />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
     </Animated.View>
   );
 }

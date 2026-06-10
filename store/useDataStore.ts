@@ -160,6 +160,16 @@ interface DataState {
   }) => void;
   normalizeLegacyIds: () => void;
   clearAllLocalData: () => void;
+  importBackupData: (backup: {
+    wallets?: Wallet[];
+    categories?: Category[];
+    transactions?: Transaction[];
+  }) => {
+    success: boolean;
+    importedTransactions: number;
+    importedWallets: number;
+    importedCategories: number;
+  };
   getFinancialMetrics: () => {
     cashAndBank: number;
     activeSavingsInvested: number;
@@ -1361,7 +1371,7 @@ export const useDataStore = create<DataState>()(
                 type: isLent ? 'expense' : 'income',
                 date: creditData.date,
                 notes: `${isLent ? 'Lent to' : 'Borrowed from'} ${creditData.person_name}. ${creditData.reason || ''}`,
-                tags: ['credit-loan', creditData.type, creditData.person_name.toLowerCase()],
+                tags: ['credit-loan', creditData.type, creditData.person_name.toLowerCase(), `credit-id:${creditId}`],
                 payment_method: wallet.name,
                 is_deleted: false,
                 created_at: new Date().toISOString(),
@@ -1433,9 +1443,36 @@ export const useDataStore = create<DataState>()(
         },
 
         deleteCredit: (id) => {
-          // Cancel pending reminders
+          // 1. Cancel pending reminders
           const creditReminders = get().creditReminders.filter((r) => r.credit_id === id && r.status === 'pending');
           creditReminders.forEach((r) => cancelScheduledNotification(r.id));
+
+          // 2. Find and delete all payments associated with this credit
+          const paymentsToDelete = get().creditPayments.filter((p) => p.credit_id === id);
+          paymentsToDelete.forEach((p) => {
+            queueSync('DELETE', 'credit_payments', p);
+          });
+
+          // 3. Find and delete all ledger transactions associated with this credit
+          const credit = get().credits.find((c) => c.id === id);
+          if (credit) {
+            const personNameLower = credit.person_name.toLowerCase();
+            const associatedTx = get().transactions.filter((t) => {
+              if (t.is_deleted) return false;
+              // Direct tag check
+              if (t.tags.includes(`credit-id:${id}`)) return true;
+              
+              // Fallback check for legacy records
+              const isCreditLoan = t.tags.includes('credit-loan') && t.tags.includes(personNameLower);
+              const isCreditPayment = t.tags.includes('credit-payment') && t.tags.includes(personNameLower);
+              return isCreditLoan || isCreditPayment;
+            });
+
+            // Revert balances and soft-delete transactions
+            associatedTx.forEach((tx) => {
+              get().deleteTransaction(tx.id);
+            });
+          }
 
           set((state) => ({
             credits: state.credits.map((c) =>
@@ -1444,6 +1481,7 @@ export const useDataStore = create<DataState>()(
             creditReminders: state.creditReminders.map((r) =>
               r.credit_id === id ? { ...r, status: 'dismissed' } : r
             ),
+            creditPayments: state.creditPayments.filter((p) => p.credit_id !== id),
           }));
 
           const deletedCredit = get().credits.find((c) => c.id === id);
@@ -1515,7 +1553,7 @@ export const useDataStore = create<DataState>()(
                 type: isLent ? 'income' : 'expense',
                 date: paymentData.date,
                 notes: `Payment for credit ${isLent ? 'lent to' : 'borrowed from'} ${credit.person_name}. Notes: ${paymentData.notes || ''}`,
-                tags: ['credit-payment', credit.type, credit.person_name.toLowerCase()],
+                tags: ['credit-payment', credit.type, credit.person_name.toLowerCase(), `credit-id:${credit.id}`, `credit-payment-id:${paymentId}`],
                 payment_method: wallet.name,
                 is_deleted: false,
                 created_at: new Date().toISOString(),
@@ -2129,18 +2167,41 @@ export const useDataStore = create<DataState>()(
               const guestCash = guestWallets.find((w) => w.type === 'cash');
               const guestBank = guestWallets.find((w) => w.type === 'bank');
 
-              const remoteCash = remoteWallets.find((w) => w.type === 'cash');
-              const remoteBank = remoteWallets.find((w) => w.type === 'bank');
+              let remoteCash = remoteWallets.find((w) => w.type === 'cash');
+              let remoteBank = remoteWallets.find((w) => w.type === 'bank');
 
               if (guestCash && remoteCash) {
                 idMap[guestCash.id] = remoteCash.id;
                 remoteCash.balance = Number(remoteCash.balance) + Number(guestCash.balance);
                 queueSync('UPDATE', 'wallets', remoteCash);
+              } else if (guestCash && !remoteCash) {
+                const migratedCash = { ...guestCash, user_id: currentUserId };
+                queueSync('INSERT', 'wallets', migratedCash);
+                remoteWallets.push(migratedCash);
+                remoteCash = migratedCash;
               }
+
               if (guestBank && remoteBank) {
                 idMap[guestBank.id] = remoteBank.id;
                 remoteBank.balance = Number(remoteBank.balance) + Number(guestBank.balance);
                 queueSync('UPDATE', 'wallets', remoteBank);
+              } else if (guestBank && !remoteBank) {
+                const migratedBank = { ...guestBank, user_id: currentUserId };
+                queueSync('INSERT', 'wallets', migratedBank);
+                remoteWallets.push(migratedBank);
+                remoteBank = migratedBank;
+              }
+
+              // Guarantee Cash and Bank wallets exist
+              if (!remoteCash) {
+                const defaultCash = DEFAULT_WALLETS(currentUserId).find((w) => w.type === 'cash')!;
+                queueSync('INSERT', 'wallets', defaultCash);
+                remoteWallets.push(defaultCash);
+              }
+              if (!remoteBank) {
+                const defaultBank = DEFAULT_WALLETS(currentUserId).find((w) => w.type === 'bank')!;
+                queueSync('INSERT', 'wallets', defaultBank);
+                remoteWallets.push(defaultBank);
               }
 
               // Other guest wallets (e.g. custom or credit card representations created locally)
@@ -2165,6 +2226,20 @@ export const useDataStore = create<DataState>()(
                   }
                   return w;
                 });
+                
+                // Seed Cash/Bank if missing from migrated guest wallets
+                const hasCash = finalWallets.some((w) => w.type === 'cash' && w.user_id === currentUserId && !w.is_deleted);
+                const hasBank = finalWallets.some((w) => w.type === 'bank' && w.user_id === currentUserId && !w.is_deleted);
+                if (!hasCash) {
+                  const defaultCash = DEFAULT_WALLETS(currentUserId).find((w) => w.type === 'cash')!;
+                  queueSync('INSERT', 'wallets', defaultCash);
+                  finalWallets.push(defaultCash);
+                }
+                if (!hasBank) {
+                  const defaultBank = DEFAULT_WALLETS(currentUserId).find((w) => w.type === 'bank')!;
+                  queueSync('INSERT', 'wallets', defaultBank);
+                  finalWallets.push(defaultBank);
+                }
               } else {
                 finalWallets = DEFAULT_WALLETS(currentUserId);
                 finalWallets.forEach((w) => queueSync('INSERT', 'wallets', w));
@@ -2505,6 +2580,146 @@ export const useDataStore = create<DataState>()(
             detectedNotifications: [],
             auditLogs: [],
           });
+        },
+
+        importBackupData: (backup) => {
+          const userId = getUserId();
+          const currentWallets = get().wallets;
+          const currentCategories = get().categories;
+
+          const walletIdMap: Record<string, string> = {};
+          const categoryIdMap: Record<string, string> = {};
+
+          const walletsToInsert: Wallet[] = [];
+          const categoriesToInsert: Category[] = [];
+
+          // 1. Process wallets
+          for (const backupWallet of backup.wallets || []) {
+            const existing = currentWallets.find(
+              (w) =>
+                w.name.toLowerCase() === backupWallet.name.toLowerCase() &&
+                w.type === backupWallet.type &&
+                !w.is_deleted
+            );
+            if (existing) {
+              walletIdMap[backupWallet.id] = existing.id;
+            } else {
+              const newWalletId = generateUuid();
+              walletIdMap[backupWallet.id] = newWalletId;
+              const newWallet: Wallet = {
+                ...backupWallet,
+                id: newWalletId,
+                user_id: userId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+              walletsToInsert.push(newWallet);
+            }
+          }
+
+          // 2. Process categories
+          for (const backupCategory of backup.categories || []) {
+            const existing = currentCategories.find(
+              (c) =>
+                c.name.toLowerCase() === backupCategory.name.toLowerCase() &&
+                c.type === backupCategory.type &&
+                !c.is_deleted
+            );
+            if (existing) {
+              categoryIdMap[backupCategory.id] = existing.id;
+            } else {
+              const newCategoryId = generateUuid();
+              categoryIdMap[backupCategory.id] = newCategoryId;
+              const newCategory: Category = {
+                ...backupCategory,
+                id: newCategoryId,
+                user_id: userId,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              };
+              categoriesToInsert.push(newCategory);
+            }
+          }
+
+          // 3. Process transactions
+          const transactionsToInsert: Transaction[] = [];
+          const walletBalanceUpdates: Record<string, number> = {};
+
+          for (const backupTx of backup.transactions || []) {
+            const newWalletId = walletIdMap[backupTx.wallet_id] || backupTx.wallet_id;
+            const newCategoryId = categoryIdMap[backupTx.category_id] || backupTx.category_id;
+
+            const targetWallet =
+              currentWallets.find((w) => w.id === newWalletId) ||
+              walletsToInsert.find((w) => w.id === newWalletId);
+
+            if (!targetWallet) continue;
+
+            const newTxId = generateUuid();
+            const newTx: Transaction = {
+              ...backupTx,
+              id: newTxId,
+              user_id: userId,
+              wallet_id: newWalletId,
+              category_id: newCategoryId,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+
+            transactionsToInsert.push(newTx);
+
+            const change = backupTx.type === 'income' ? Number(backupTx.amount) : -Number(backupTx.amount);
+            walletBalanceUpdates[newWalletId] = (walletBalanceUpdates[newWalletId] || 0) + change;
+          }
+
+          // Batch update local state and queue synchronization
+          let updatedWallets = [...currentWallets];
+          for (const newW of walletsToInsert) {
+            updatedWallets.push(newW);
+            queueSync('INSERT', 'wallets', newW);
+          }
+
+          updatedWallets = updatedWallets.map((w) => {
+            if (walletBalanceUpdates[w.id] !== undefined) {
+              const updatedW = {
+                ...w,
+                balance: Number(w.balance) + walletBalanceUpdates[w.id],
+                updated_at: new Date().toISOString(),
+              };
+              queueSync('UPDATE', 'wallets', updatedW);
+              return updatedW;
+            }
+            return w;
+          });
+
+          const updatedCategories = [...currentCategories];
+          for (const newC of categoriesToInsert) {
+            updatedCategories.push(newC);
+            queueSync('INSERT', 'categories', newC);
+          }
+
+          const updatedTransactions = [...get().transactions];
+          for (const newT of transactionsToInsert) {
+            updatedTransactions.push(newT);
+            queueSync('INSERT', 'transactions', newT);
+          }
+
+          set({
+            wallets: updatedWallets,
+            categories: updatedCategories,
+            transactions: updatedTransactions,
+          });
+
+          logAction('TRANSACTION_CREATED', {
+            message: `Bulk imported backup containing ${transactionsToInsert.length} transactions, ${walletsToInsert.length} new wallets, and ${categoriesToInsert.length} new categories.`,
+          });
+
+          return {
+            success: true,
+            importedTransactions: transactionsToInsert.length,
+            importedWallets: walletsToInsert.length,
+            importedCategories: categoriesToInsert.length,
+          };
         },
       };
     },

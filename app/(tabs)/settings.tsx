@@ -13,8 +13,13 @@ import {
   Folder,
   Sparkles,
   ListTodo,
+  Download,
+  Upload,
 } from 'lucide-react-native';
 import React from 'react';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Sharing from 'expo-sharing';
 import {
   Alert,
   ScrollView,
@@ -35,8 +40,110 @@ export default function SettingsScreen() {
   const router = useRouter();
   
   const { user, isGuest, preferences, updatePreferences, signOut } = useAuthStore();
-  const { clearAllLocalData, transactions, detectedNotifications } = useDataStore();
+  const {
+    clearAllLocalData,
+    transactions,
+    detectedNotifications,
+    wallets,
+    categories,
+    importBackupData,
+  } = useDataStore();
   const { pendingQueue, clearQueue, isOnline, isSyncing, triggerSync } = useSyncStore();
+
+  const handleExportBackup = async () => {
+    try {
+      const exportData = {
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        wallets: wallets.filter((w) => !w.is_deleted),
+        categories: categories.filter((c) => !c.is_deleted),
+        transactions: transactions.filter((t) => !t.is_deleted),
+      };
+
+      const jsonString = JSON.stringify(exportData, null, 2);
+      const filename = `MyExpenses_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      const fileUri = `${FileSystem.cacheDirectory}${filename}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, jsonString, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/json',
+          dialogTitle: 'Export My Expenses Backup',
+          UTI: 'public.json',
+        });
+      } else {
+        Alert.alert('Sharing Unavailable', 'Sharing is not supported on this device.');
+      }
+    } catch (error: any) {
+      console.error('Export failed:', error);
+      Alert.alert('Export Failed ❌', `An error occurred while creating the backup: ${error.message}`);
+    }
+  };
+
+  const handleImportBackup = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        return;
+      }
+
+      const fileAsset = result.assets[0];
+      const fileContent = await FileSystem.readAsStringAsync(fileAsset.uri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      const parsedData = JSON.parse(fileContent);
+
+      if (!parsedData.transactions || !Array.isArray(parsedData.transactions)) {
+        Alert.alert(
+          'Invalid Backup File ⚠️',
+          'The selected file is not a valid My Expenses backup (missing transactions array).'
+        );
+        return;
+      }
+
+      Alert.alert(
+        'Confirm Import 📥',
+        `This will import:\n• ${parsedData.transactions.length} Transactions\n• ${parsedData.wallets?.length || 0} Wallets\n• ${parsedData.categories?.length || 0} Categories\n\nNew items will be added and synced. Existing records will not be overwritten. Do you want to proceed?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import Data',
+            onPress: () => {
+              try {
+                const importResult = importBackupData({
+                  wallets: parsedData.wallets,
+                  categories: parsedData.categories,
+                  transactions: parsedData.transactions,
+                });
+
+                if (importResult.success) {
+                  Alert.alert(
+                    'Import Successful! 🎉',
+                    `Successfully imported:\n• ${importResult.importedTransactions} Transactions\n• ${importResult.importedWallets} New Wallets\n• ${importResult.importedCategories} New Categories\n\nAll imported items have been queued for cloud synchronization.`
+                  );
+                } else {
+                  Alert.alert('Import Failed ❌', 'Failed to import the backup data.');
+                }
+              } catch (e: any) {
+                Alert.alert('Import Error ❌', e.message);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('Import failed:', error);
+      Alert.alert('Import Failed ❌', `An error occurred while reading the file: ${error.message}`);
+    }
+  };
 
   const handleThemeChange = (mode: 'light' | 'dark' | 'system') => {
     updatePreferences({ theme: mode });
@@ -258,6 +365,30 @@ export default function SettingsScreen() {
               </Text>
             </View>
           </View>
+        </Card>
+      </View>
+
+      {/* Backup & Restore */}
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Backup & Data Transfer</Text>
+        <Card variant="flat" style={{ backgroundColor: colors.card, padding: 14 }}>
+          {/* Export Backup */}
+          <TouchableOpacity
+            style={[styles.actionRow, { borderBottomWidth: 0.5, borderBottomColor: colors.border, paddingBottom: 14 }]}
+            onPress={handleExportBackup}
+          >
+            <Download color={colors.primary} size={20} style={{ marginRight: 12 }} />
+            <Text style={[styles.actionRowText, { color: colors.text }]}>Export Local Backup (JSON) 📤</Text>
+          </TouchableOpacity>
+
+          {/* Import Backup */}
+          <TouchableOpacity
+            style={[styles.actionRow, { paddingTop: 14 }]}
+            onPress={handleImportBackup}
+          >
+            <Upload color={colors.success} size={20} style={{ marginRight: 12 }} />
+            <Text style={[styles.actionRowText, { color: colors.text }]}>Import Backup (JSON) 📥</Text>
+          </TouchableOpacity>
         </Card>
       </View>
 

@@ -603,7 +603,7 @@ export default function SavingsScreen() {
             <Text style={[styles.label, { color: colors.text }]}>Paid From Account *</Text>
             <View style={styles.walletPickerList}>
               {wallets
-                .filter((w) => !w.is_deleted && w.type !== 'credit_card')
+                .filter((w) => !w.is_deleted)
                 .map((w) => (
                   <TouchableOpacity
                     key={w.id}

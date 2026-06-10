@@ -136,32 +136,41 @@ export const useCloudSync = () => {
           detectedNotificationsRes,
         ];
 
-        const firstError = responses.find((res) => res.error)?.error;
-        if (firstError) {
-          throw firstError;
-        }
+        // Log errors for individual tables but don't abort the entire load
+        const tableNames = [
+          'wallets', 'categories', 'transactions', 'budgets', 'savings_goals',
+          'recurring_transactions', 'notifications', 'credit_cards',
+          'credit_card_statements', 'credit_card_emis', 'credit_card_rewards',
+          'savings_plans', 'subscriptions', 'bill_splits', 'credits',
+          'credit_payments', 'credit_reminders', 'detected_notifications',
+        ];
+        responses.forEach((res, idx) => {
+          if (res.error) {
+            console.warn(`[CloudSync] Failed to fetch ${tableNames[idx]}:`, res.error.message);
+          }
+        });
 
         if (cancelled) return;
 
         loadRemoteData({
-          wallets: walletsRes.data || [],
-          categories: categoriesRes.data || [],
-          transactions: transactionsRes.data || [],
-          budgets: budgetsRes.data || [],
-          savingsGoals: savingsGoalsRes.data || [],
-          recurringTransactions: recurringTransactionsRes.data || [],
-          notifications: notificationsRes.data || [],
-          creditCards: creditCardsRes.data || [],
-          creditCardStatements: creditCardStatementsRes.data || [],
-          creditCardEMIs: creditCardEMIsRes.data || [],
-          creditCardRewards: creditCardRewardsRes.data || [],
-          savingsPlans: savingsPlansRes.data || [],
-          subscriptions: subscriptionsRes.data || [],
-          billSplits: billSplitsRes.data || [],
-          credits: creditsRes.data || [],
-          creditPayments: creditPaymentsRes.data || [],
-          creditReminders: creditRemindersRes.data || [],
-          detectedNotifications: detectedNotificationsRes.data || [],
+          wallets: walletsRes.data ?? undefined,
+          categories: categoriesRes.data ?? undefined,
+          transactions: transactionsRes.data ?? undefined,
+          budgets: budgetsRes.data ?? undefined,
+          savingsGoals: savingsGoalsRes.data ?? undefined,
+          recurringTransactions: recurringTransactionsRes.data ?? undefined,
+          notifications: notificationsRes.data ?? undefined,
+          creditCards: creditCardsRes.data ?? undefined,
+          creditCardStatements: creditCardStatementsRes.data ?? undefined,
+          creditCardEMIs: creditCardEMIsRes.data ?? undefined,
+          creditCardRewards: creditCardRewardsRes.data ?? undefined,
+          savingsPlans: savingsPlansRes.data ?? undefined,
+          subscriptions: subscriptionsRes.data ?? undefined,
+          billSplits: billSplitsRes.data ?? undefined,
+          credits: creditsRes.data ?? undefined,
+          creditPayments: creditPaymentsRes.data ?? undefined,
+          creditReminders: creditRemindersRes.data ?? undefined,
+          detectedNotifications: detectedNotificationsRes.data ?? undefined,
         });
         lastHydratedUserId.current = user.id;
         setOnline(true);
