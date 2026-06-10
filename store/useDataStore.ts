@@ -502,9 +502,21 @@ export const useDataStore = create<DataState>()(
           const wallet = get().wallets.find((w) => w.id === txData.wallet_id);
           if (wallet) {
             const balanceChange = txData.type === 'income' ? txData.amount : -txData.amount;
+            const newBalance = Number(wallet.balance) + balanceChange;
             get().updateWallet(txData.wallet_id, {
-              balance: Number(wallet.balance) + balanceChange,
+              balance: newBalance,
             });
+
+            // If it's a credit card wallet, keep the credit card available limit in sync
+            if (wallet.type === 'credit_card') {
+              const card = get().creditCards.find((c) => c.wallet_id === wallet.id);
+              if (card) {
+                const outstanding = Math.abs(Math.min(0, newBalance));
+                get().updateCreditCard(card.id, {
+                  available_limit: Math.max(0, card.credit_limit - outstanding),
+                });
+              }
+            }
           }
 
           set((state) => ({ transactions: [...state.transactions, newTx] }));
@@ -556,7 +568,19 @@ export const useDataStore = create<DataState>()(
           const prevWallet = get().wallets.find((w) => w.id === prevTx.wallet_id);
           if (prevWallet) {
             const revertAmount = prevTx.type === 'income' ? -prevTx.amount : prevTx.amount;
-            get().updateWallet(prevTx.wallet_id, { balance: Number(prevWallet.balance) + revertAmount });
+            const newBalance = Number(prevWallet.balance) + revertAmount;
+            get().updateWallet(prevTx.wallet_id, { balance: newBalance });
+
+            // If it's a credit card wallet, keep the credit card available limit in sync
+            if (prevWallet.type === 'credit_card') {
+              const card = get().creditCards.find((c) => c.wallet_id === prevWallet.id);
+              if (card) {
+                const outstanding = Math.abs(Math.min(0, newBalance));
+                get().updateCreditCard(card.id, {
+                  available_limit: Math.max(0, card.credit_limit - outstanding),
+                });
+              }
+            }
           }
 
           // Update Transaction state
@@ -573,7 +597,19 @@ export const useDataStore = create<DataState>()(
           const newWallet = get().wallets.find((w) => w.id === updatedTx.wallet_id);
           if (newWallet) {
             const commitAmount = updatedTx.type === 'income' ? updatedTx.amount : -updatedTx.amount;
-            get().updateWallet(updatedTx.wallet_id, { balance: Number(newWallet.balance) + commitAmount });
+            const newBalance = Number(newWallet.balance) + commitAmount;
+            get().updateWallet(updatedTx.wallet_id, { balance: newBalance });
+
+            // If it's a credit card wallet, keep the credit card available limit in sync
+            if (newWallet.type === 'credit_card') {
+              const card = get().creditCards.find((c) => c.wallet_id === newWallet.id);
+              if (card) {
+                const outstanding = Math.abs(Math.min(0, newBalance));
+                get().updateCreditCard(card.id, {
+                  available_limit: Math.max(0, card.credit_limit - outstanding),
+                });
+              }
+            }
           }
 
           queueSync('UPDATE', 'transactions', updatedTx);
@@ -588,7 +624,19 @@ export const useDataStore = create<DataState>()(
           const wallet = get().wallets.find((w) => w.id === prevTx.wallet_id);
           if (wallet) {
             const revertAmount = prevTx.type === 'income' ? -prevTx.amount : prevTx.amount;
-            get().updateWallet(prevTx.wallet_id, { balance: Number(wallet.balance) + revertAmount });
+            const newBalance = Number(wallet.balance) + revertAmount;
+            get().updateWallet(prevTx.wallet_id, { balance: newBalance });
+
+            // If it's a credit card wallet, keep the credit card available limit in sync
+            if (wallet.type === 'credit_card') {
+              const card = get().creditCards.find((c) => c.wallet_id === wallet.id);
+              if (card) {
+                const outstanding = Math.abs(Math.min(0, newBalance));
+                get().updateCreditCard(card.id, {
+                  available_limit: Math.max(0, card.credit_limit - outstanding),
+                });
+              }
+            }
           }
 
           set((state) => ({

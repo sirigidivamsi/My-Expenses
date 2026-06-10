@@ -24,7 +24,7 @@ export default function AddTransactionScreen() {
   const router = useRouter();
   const { wallet_id } = useLocalSearchParams<{ wallet_id?: string }>();
   
-  const { categories, wallets, addTransaction } = useDataStore();
+  const { categories, wallets, creditCards, addTransaction } = useDataStore();
 
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [amount, setAmount] = useState('');
@@ -39,15 +39,34 @@ export default function AddTransactionScreen() {
     if (type === 'expense' && amount && selectedWalletId) {
       const amt = parseFloat(amount);
       const wallet = wallets.find((w) => w.id === selectedWalletId);
-      if (wallet && !isNaN(amt) && amt > wallet.balance) {
-        setBalanceError(`Insufficient balance! Selected wallet has only ₹${wallet.balance.toFixed(2)}`);
+      if (wallet && !isNaN(amt)) {
+        if (wallet.type === 'credit_card') {
+          const card = creditCards.find((c) => c.wallet_id === wallet.id);
+          if (card) {
+            const outstanding = Math.abs(Math.min(0, Number(wallet.balance)));
+            const availableLimit = card.credit_limit - outstanding;
+            if (amt > availableLimit) {
+              setBalanceError(`Insufficient credit limit! Available limit is ₹${availableLimit.toFixed(2)}`);
+            } else {
+              setBalanceError('');
+            }
+          } else {
+            setBalanceError('');
+          }
+        } else {
+          if (amt > wallet.balance) {
+            setBalanceError(`Insufficient balance! Selected wallet has only ₹${wallet.balance.toFixed(2)}`);
+          } else {
+            setBalanceError('');
+          }
+        }
       } else {
         setBalanceError('');
       }
     } else {
       setBalanceError('');
     }
-  }, [amount, selectedWalletId, type, wallets]);
+  }, [amount, selectedWalletId, type, wallets, creditCards]);
 
   // Default selections
   React.useEffect(() => {
@@ -96,9 +115,23 @@ export default function AddTransactionScreen() {
     const wallet = wallets.find((w) => w.id === selectedWalletId);
     if (!wallet) return;
 
-    if (type === 'expense' && amt > wallet.balance) {
-      Alert.alert('Insufficient Balance', 'You cannot record an expense exceeding your wallet balance.');
-      return;
+    if (type === 'expense') {
+      if (wallet.type === 'credit_card') {
+        const card = creditCards.find((c) => c.wallet_id === wallet.id);
+        if (card) {
+          const outstanding = Math.abs(Math.min(0, Number(wallet.balance)));
+          const availableLimit = card.credit_limit - outstanding;
+          if (amt > availableLimit) {
+            Alert.alert('Limit Exceeded', 'You cannot record an expense exceeding your available credit limit.');
+            return;
+          }
+        }
+      } else {
+        if (amt > wallet.balance) {
+          Alert.alert('Insufficient Balance', 'You cannot record an expense exceeding your wallet balance.');
+          return;
+        }
+      }
     }
 
     const tags = tagsInput
